@@ -106,8 +106,30 @@ function lessonView(lesson) {
 }
 
 function buildItems(lesson) {
-  return lesson.questions.map((q, i) => ({ key: qid(lesson, i), q: q, lesson: lesson }));
+  return lesson.questions.map((q, i) => ({
+    key: qid(lesson, i),
+    q: withShuffledOptions(q),
+    lesson: lesson
+  }));
 }
+
+// Returns a copy of the question whose options are in random order. The copy
+// matters: the array in the lesson file is never touched, so a module can be
+// written with the correct answer anywhere and it makes no difference.
+function withShuffledOptions(q) {
+  const copy = {};
+  for (const k in q) copy[k] = q[k];
+  copy.options = shuffle(q.options.slice());
+  return copy;
+}
+
+// Re-randomises an existing set of items, used by "Run it again" so a repeat
+// run does not present the same option order as the run before it.
+function reshuffleItems(items) {
+  items.forEach(it => { it.q = withShuffledOptions(it.q); });
+  return items;
+}
+
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
@@ -136,6 +158,13 @@ function runDrill(lesson, items, label) {
     window.scrollTo(0, 0);
   }
 
+  // A retry re-randomises the options, so a second attempt cannot be won by
+  // remembering which position you already ruled out.
+  function retry() {
+    items[n].q = withShuffledOptions(items[n].q);
+    draw();
+  }
+
   function answer(j) {
     const it = items[n];
     const q = it.q;
@@ -151,9 +180,7 @@ function runDrill(lesson, items, label) {
     if (!isRight) results[n].firstTry = false;
 
     let html = '<p class="verdict"><b class="' + (isRight ? "right" : "wrong") + '">' +
-      (isRight ? "Correct." : "Not that one.") + '</b> ' + esc(chosen.why);
-    if (isRight) html += '</p>';
-    else html += '</p>';
+      (isRight ? "Correct." : "Not that one.") + '</b> ' + esc(chosen.why) + '</p>';
 
     if (isRight) {
       html += '<div class="acts"><button class="go" id="next">' +
@@ -166,7 +193,7 @@ function runDrill(lesson, items, label) {
     document.getElementById("feedback").innerHTML = html;
     if (isRight) document.getElementById("next").onclick = advance;
     else {
-      document.getElementById("retry").onclick = draw;
+      document.getElementById("retry").onclick = retry;
       document.getElementById("reveal").onclick = () => reveal(correctIndex);
     }
   }
@@ -211,7 +238,7 @@ function runDrill(lesson, items, label) {
       '<div class="modes">' +
       '<button class="go" id="again">Run it again</button>' +
       '<button class="go alt" id="back2">Back to the module</button></div></div>';
-    document.getElementById("again").onclick = () => runDrill(lesson, items, label);
+    document.getElementById("again").onclick = () => runDrill(lesson, reshuffleItems(items), label);
     document.getElementById("back2").onclick = () => lessonView(lesson);
     window.scrollTo(0, 0);
   }
